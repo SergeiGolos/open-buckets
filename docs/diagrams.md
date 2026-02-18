@@ -130,6 +130,81 @@ C4Component
 
 ---
 
+## C4 Level 3: Component - Success Tracker
+
+```mermaid
+C4Component
+  title Component View - Success Tracker
+
+  Container(success_tracker, "Success Tracker", "Success record management")
+
+  Component(record_validator, "Record Validator", "Schema validator", "Validates success record format")
+  Component(record_builder, "Record Builder", "Object builder", "Constructs success record from data")
+  Component(file_writer, "File Writer", "File system writer", "Persists JSON records to disk")
+  Component(metrics_updater, "Metrics Updater", "Metrics interface", "Updates metrics collector")
+  Component(record_indexer, "Record Indexer", "In-memory index", "Maintains index of records for queries")
+
+  Rel(record_validator, record_builder, "Validates", "SuccessRecord schema")
+  Rel(record_builder, file_writer, "Persists", "SUCCESS-*.json")
+  Rel(record_builder, metrics_updater, "Updates", "Success metrics")
+  Rel(file_writer, record_indexer, "Indexes", "Record metadata")
+  Rel(record_indexer, metrics_updater, "Provides stats", "Record counts")
+```
+
+---
+
+## C4 Level 3: Component - Error Tracker
+
+```mermaid
+C4Component
+  title Component View - Error Tracker
+
+  Container(error_tracker, "Error Tracker", "Error record management")
+
+  Component(error_classifier, "Error Classifier", "Categorization engine", "Categorizes errors by type")
+  Component(error_context, "Error Context Builder", "Context extractor", "Extracts operation context")
+  Component(error_formatter, "Error Formatter", "Structured formatter", "Formats error details")
+  Component(error_writer, "Error Writer", "File system writer", "Persists JSON records to disk")
+  Component(error_aggregator, "Error Aggregator", "Statistics engine", "Aggregates error statistics")
+  Component(recovery_logger, "Recovery Logger", "Recovery tracker", "Logs recovery attempts")
+
+  Rel(error_classifier, error_context, "Classifies", "Error category")
+  Rel(error_context, error_formatter, "Provides context", "Operation details")
+  Rel(error_formatter, error_writer, "Persists", "ERROR-*.json")
+  Rel(error_formatter, error_aggregator, "Aggregates", "Error statistics")
+  Rel(error_classifier, recovery_logger, "Tracks", "Recovery attempts")
+  Rel(error_aggregator, metrics_updater, "Updates", "Error metrics")
+```
+
+---
+
+## C4 Level 3: Component - Metrics Collector
+
+```mermaid
+C4Component
+  title Component View - Metrics Collector
+
+  Container(metrics_collector, "Metrics Collector", "Metrics aggregation")
+
+  Component(counter_aggregator, "Counter Aggregator", "Sum counter", "Accumulates count metrics")
+  Component(gauge_sampler, "Gauge Sampler", "Value sampler", "Samples gauge metrics")
+  Component(histogram_collector, "Histogram Collector", "Distribution collector", "Collects histogram data")
+  Component(rate_calculator, "Rate Calculator", "Rate engine", "Calculates rates (per second)")
+  Component(percentile_calculator, "Percentile Calculator", "Percentile engine", "Calculates P50, P90, P95, P99")
+  Component(snapshot_generator, "Snapshot Generator", "Snapshot engine", "Generates periodic snapshots")
+  Component(alert_checker, "Alert Checker", "Threshold monitor", "Monitors metrics against thresholds")
+
+  Rel(counter_aggregator, snapshot_generator, "Provides", "Counter totals")
+  Rel(gauge_sampler, snapshot_generator, "Provides", "Gauge values")
+  Rel(histogram_collector, percentile_calculator, "Provides", "Distribution data")
+  Rel(rate_calculator, snapshot_generator, "Provides", "Rate metrics")
+  Rel(percentile_calculator, snapshot_generator, "Provides", "Percentile values")
+  Rel(snapshot_generator, alert_checker, "Monitors", "Metric thresholds")
+  Rel(alert_checker, metrics_updater, "Triggers", "Alert notifications")
+```
+
+---
+
 ## Sequence Diagram: File Drop Processing
 
 ```mermaid
@@ -321,6 +396,155 @@ stateDiagram-v2
 
 ---
 
+## Sequence Diagram: Runner Startup
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant User
+  participant CLI as CLI Interface
+  participant Runner as Runner Engine
+  participant WS as Watcher Service
+  participant ST as Success Tracker
+  participant ET as Error Tracker
+  participant MC as Metrics Collector
+  participant FS as File System
+
+  User->>CLI: open-buckets --watch ./incoming --watch ./processed
+  CLI->>Runner: initialize(config)
+  Runner->>Runner: Validate directories
+  Runner->>ST: initialize(errorDir)
+  Runner->>ET: initialize(errorDir)
+  Runner->>MC: initialize(metricsInterval)
+
+  Runner->>WS: start([directories])
+  WS->>FS: fs.watch() on each directory
+  WS-->>Runner: Watchers started
+
+  Runner->>MC: startPeriodicSnapshots()
+  MC->>MC: Set interval (60s)
+
+  Runner-->>CLI: Runner started
+  CLI-->>User: Monitoring directories...
+
+  Note over User,FS: System running - processing file drops
+```
+
+---
+
+## Sequence Diagram: Success Processing with Tracking
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant WS as Watcher Service
+  participant CB as Context Builder
+  participant FP as File Processor
+  participant ST as Success Tracker
+  participant OG as Output Generator
+  participant MC as Metrics Collector
+  participant FS as File System
+
+  WS->>CB: buildContext(file)
+  CB->>FS: Read .bucket-include
+  CB->>FS: Run grep
+  CB-->>WS: Context built
+
+  WS->>FP: process(file, context)
+  FP->>FS: Read file content
+  FP->>OG: Generate markdown
+  OG->>FS: Write .md file
+  FS-->>FP: Output written
+
+  FP->>ST: recordSuccess(filePath, result)
+  ST->>ST: Validate result
+  ST->>ST: Build success record
+  ST->>FS: Write SUCCESS-*.json
+  ST->>MC: updateMetrics(success)
+  ST-->>FP: Success recorded
+
+  FP-->>WS: Processing complete
+```
+
+---
+
+## Sequence Diagram: Error Processing with Tracking
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant WS as Watcher Service
+  participant CB as Context Builder
+  participant FP as File Processor
+  participant ET as Error Tracker
+  participant MC as Metrics Collector
+  participant FS as File System
+
+  WS->>CB: buildContext(file)
+  CB->>FS: Read .bucket-include
+  CB->>FS: Run grep (ripgrep)
+  FS-->>CB: Error (ripgrep not found)
+
+  CB->>CB: Try fallback (grep)
+  CB->>FS: Run grep
+  FS-->>CB: Success
+
+  CB-->>WS: Context built (with fallback)
+
+  WS->>FP: process(file, context)
+  FP->>FS: Read file content
+  FS-->>FP: Error (permission denied)
+
+  FP->>ET: recordError(error, context)
+  ET->>ET: Classify error (FileAccessError)
+  ET->>ET: Build error context
+  ET->>FS: Write ERROR-*.json
+  ET->>MC: updateMetrics(error)
+  ET-->>FP: Error recorded
+
+  FP->>FP: Continue with next file
+  FP-->>WS: Processing skipped
+```
+
+---
+
+## State Diagram: Success Tracker Lifecycle
+
+```mermaid
+stateDiagram-v2
+  [*] --> IDLE
+  IDLE --> VALIDATING: recordSuccess()
+  VALIDATING --> IDLE: Validation failed
+  VALIDATING --> BUILDING: Validation passed
+  BUILDING --> METRICS_UPDATING: Record built
+  METRICS_UPDATING --> WRITING: Metrics updated
+  WRITING --> IDLE: Write successful
+  WRITING --> ERROR_STATE: Write failed
+
+  ERROR_STATE --> IDLE: Log and continue
+```
+
+---
+
+## State Diagram: Error Tracker Lifecycle
+
+```mermaid
+stateDiagram-v2
+  [*] --> IDLE
+  IDLE --> CLASSIFYING: recordError()
+  CLASSIFYING --> BUILDING_CONTEXT: Classification complete
+  BUILDING_CONTEXT --> FORMATTING: Context built
+  FORMATTING --> AGGREGATING: Record formatted
+  AGGREGATING --> METRICS_UPDATING: Aggregation complete
+  METRICS_UPDATING --> WRITING: Metrics updated
+  WRITING --> IDLE: Write successful
+  WRITING --> ERROR_STATE: Write failed
+
+  ERROR_STATE --> IDLE: Log and continue
+```
+
+---
+
 ## Data Flow: Processing Pipeline
 
 ```mermaid
@@ -382,6 +606,187 @@ flowchart TB
     D --> F
     E --> H
     D --> I
+```
+
+---
+
+## Complete Runner Data Flow
+
+```mermaid
+flowchart TD
+    subgraph "Input"
+        A[File Drop]
+        B[.bucket-include Config]
+    end
+
+    subgraph "Watcher Service"
+        C[Event Listener]
+        D[Event Debouncer]
+        E[Event Router]
+    end
+
+    subgraph "Context Builder"
+        F[Config Parser]
+        G[Pattern Resolver]
+        H[Directory Grep Engine]
+    end
+
+    subgraph "File Processor"
+        I[Binary Detector]
+        J[Content Reader]
+        K[Output Generator]
+    end
+
+    subgraph "Tracking System"
+        L[Success Tracker]
+        M[Error Tracker]
+        N[Metrics Collector]
+    end
+
+    subgraph "Output"
+        O[Markdown Files]
+        P[Success Records JSON]
+        Q[Error Records JSON]
+        R[Metrics Snapshots]
+        S[Placeholders MD]
+    end
+
+    A --> C
+    C --> D
+    D --> E
+    B --> F
+    B --> G
+    F --> E
+    G --> E
+    E --> H
+    H --> I
+    I --> J
+    J --> K
+
+    K -->|Success| L
+    K -->|Error| M
+
+    L --> P
+    L --> N
+    M --> Q
+    M --> N
+
+    N --> R
+    N --> S
+
+    K --> O
+
+    style L fill:#d4edda
+    style M fill:#f8d7da
+    style N fill:#fff3cd
+    style O fill:#e1f5ff
+    style P fill:#d4edda
+    style Q fill:#f8d7da
+    style R fill:#fff3cd
+    style S fill:#e1f5ff
+```
+
+---
+
+## Error Recovery Flow
+
+```mermaid
+flowchart TD
+    A[Error Detected] --> B{Error Type?}
+
+    B -->|Configuration| C[Use Default Config]
+    B -->|FileAccess| D[Skip File]
+    B -->|ExternalTool| E[Try Fallback]
+
+    E --> F{Fallback Available?}
+    F -->|Yes| G[Execute Fallback]
+    F -->|No| H[Check Circuit Breaker]
+
+    G --> I{Fallback Success?}
+    I -->|Yes| J[Continue Processing]
+    I -->|No| H
+
+    H --> K{Circuit State?}
+    K -->|CLOSED| L[Retry with Backoff]
+    K -->|HALF OPEN| M[Test Call]
+    K -->|OPEN| N[Skip & Log Error]
+
+    L --> O{Max Retries?}
+    O -->|No| E
+    O -->|Yes| P[Open Circuit]
+
+    M --> Q{Test Success?}
+    Q -->|Yes| R[Close Circuit]
+    Q -->|No| P
+
+    N --> S[Record Error]
+    P --> S
+    C --> T[Continue with Defaults]
+    D --> S
+
+    style E fill:#fff3cd
+    style G fill:#fff3cd
+    style L fill:#fff3cd
+    style M fill:#fff3cd
+    style P fill:#f8d7da
+    style N fill:#f8d7da
+    style S fill:#f8d7da
+```
+
+---
+
+## Metrics Aggregation Flow
+
+```mermaid
+flowchart LR
+    subgraph "Sources"
+        A[Success Tracker]
+        B[Error Tracker]
+        C[Watcher Service]
+        D[Processor Manager]
+    end
+
+    subgraph "Metrics Collector"
+        E[Counter Aggregator]
+        F[Gauge Sampler]
+        G[Histogram Collector]
+        H[Rate Calculator]
+        I[Percentile Calculator]
+    end
+
+    subgraph "Output"
+        J[Console Display]
+        K[Log Files JSON]
+        L[METRICS_SNAPSHOT.md]
+    end
+
+    A --> E
+    B --> E
+    A --> F
+    B --> F
+    C --> F
+    D --> G
+    A --> G
+    B --> G
+
+    E --> H
+    F --> H
+    E --> I
+    G --> I
+
+    H --> J
+    F --> J
+    H --> K
+    I --> K
+    H --> L
+    I --> L
+
+    style E fill:#d1ecf1
+    style F fill:#d1ecf1
+    style G fill:#d1ecf1
+    style H fill:#d1ecf1
+    style I fill:#d1ecf1
+    style L fill:#e1f5ff
 ```
 
 ---
