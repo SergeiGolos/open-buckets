@@ -1,11 +1,17 @@
 const fs = require('fs');
 const path = require('path');
-const processor = require('../processor');
+const { getProcessor } = require('../processor');
 
 let watchers = [];
 
 function start(directories) {
   console.log('Starting directory watchers...');
+
+  // Preserve original working directory for config and context building
+  const originalCwd = process.cwd();
+
+  // Initialize processor with original CWD
+  const processor = getProcessor(originalCwd);
 
   for (const dir of directories) {
     try {
@@ -19,6 +25,7 @@ function start(directories) {
               try {
                 const stats = fs.statSync(filePath);
                 if (stats.isFile()) {
+                  // Pass original CWD for context building
                   processor.processFile(filePath, dir);
                 }
               } catch (err) {
@@ -41,6 +48,7 @@ function start(directories) {
   }
 
   console.log('');
+  console.log(`Working directory: ${originalCwd}`);
   console.log('Waiting for file drops... Press Ctrl+C to stop.\n');
 }
 

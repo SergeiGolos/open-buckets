@@ -1,96 +1,73 @@
 const fs = require('fs');
 const path = require('path');
+const ContextBuilder = require('../context-builder');
+const config = require('../config');
 
-function isTextFile(filePath) {
-  try {
-    const buffer = fs.readFileSync(filePath);
-    const size = buffer.length;
+class FileProcessor {
+  constructor(baseDir) {
+    this.baseDir = baseDir;
+    this.config = config.loadConfig();
+    this.contextBuilder = new ContextBuilder(this.config, baseDir);
+  }
 
-    // Check first 8KB for text content
-    const sampleSize = Math.min(size, 8192);
-    const sample = buffer.toString('utf8', 0, sampleSize);
+  async processFile(filePath, watchDir) {
+    try {
+      console.log('\n' + '='.repeat(80));
+      console.log('File dropped - Building Context...');
+      console.log('='.repeat(80));
+      console.log(`Watch directory: ${watchDir}`);
+      console.log(`Dropped file: ${path.basename(filePath)}`);
+      console.log(`Full path: ${filePath}`);
+      console.log('');
 
-    // Check for null bytes (indicates binary)
-    for (let i = 0; i < sampleSize; i++) {
-      if (sample.charCodeAt(i) === 0) {
-        return false;
-      }
+      // Load and display config info
+      this.displayConfigInfo();
+
+      console.log('');
+      console.log('-'.repeat(80));
+      console.log('Building context...');
+      console.log('-'.repeat(80));
+
+      // Build full context
+      const context = await this.contextBuilder.buildForFile(filePath);
+
+      console.log('');
+      console.log('-'.repeat(80));
+      console.log('Context complete!');
+      console.log('-'.repeat(80));
+      console.log('');
+
+      // Display the full context
+      const formatted = this.contextBuilder.formatContext(context);
+      console.log(formatted);
+      console.log('');
+
+    } catch (err) {
+      console.error(`Error processing file ${filePath}:`, err.message);
+      console.error(err.stack);
     }
+  }
 
-    // Additional heuristics for common binary patterns
-    // PDF: %PDF
-    if (sample.startsWith('%PDF')) return false;
-    // ZIP: PK
-    if (sample.startsWith('PK')) return false;
-    // PNG: PNG
-    if (sample.startsWith('\x89PNG')) return false;
-    // JPEG: \xFF\xD8
-    if (sample.startsWith('\xFF\xD8')) return false;
-    // ELF: \x7FELF
-    if (sample.startsWith('\x7FELF')) return false;
-
-    // If we got here, likely text
-    return true;
-  } catch (err) {
-    console.error(`Error checking file type: ${err.message}`);
-    return false;
+  displayConfigInfo() {
+    console.log(`Context name: ${this.config.context?.name || 'Unnamed'}`);
+    console.log(`Include patterns: ${this.config.include?.patterns?.length || 0}`);
+    console.log(`Exclude patterns: ${this.config.exclude?.patterns?.length || 0}`);
+    console.log(`Watch directories: ${this.config.directories?.paths?.length || 0}`);
+    console.log(`File limit: ${this.config.limits?.maxFiles || 100} files, ${this.config.limits?.maxSizeMB || 10}MB`);
   }
 }
 
-function formatFileSize(bytes) {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
-}
+// Singleton instance
+let instance = null;
 
-function printSeparator() {
-  console.log('='.repeat(80));
-}
-
-function printHeader(filePath, watchDir) {
-  const stats = fs.statSync(filePath);
-  const fileName = path.basename(filePath);
-  const fileSize = formatFileSize(stats.size);
-  const timestamp = new Date().toISOString();
-
-  console.log('');
-  printSeparator();
-  console.log(`File dropped: ${fileName}`);
-  console.log(`Watch directory: ${watchDir}`);
-  console.log(`Full path: ${filePath}`);
-  console.log(`Size: ${fileSize}`);
-  console.log(`Detected at: ${timestamp}`);
-  console.log('');
-}
-
-function processFile(filePath, watchDir) {
-  try {
-    printHeader(filePath, watchDir);
-
-    if (isTextFile(filePath)) {
-      const content = fs.readFileSync(filePath, 'utf8');
-      console.log('Content (text file):');
-      console.log('-'.repeat(40));
-      console.log(content);
-      console.log('-'.repeat(40));
-      console.log('[END OF FILE]');
-    } else {
-      console.log('Content: [BINARY FILE - Skipped]');
-      console.log('Reason: File appears to be binary data');
-    }
-
-    printSeparator();
-    console.log('');
-  } catch (err) {
-    console.error(`Error processing file ${filePath}:`, err.message);
-    printSeparator();
+function getProcessor(baseDir) {
+  if (!instance) {
+    instance = new FileProcessor(baseDir);
   }
+  return instance;
 }
 
 module.exports = {
-  processFile,
-  isTextFile,
-  formatFileSize
+  getProcessor,
+  FileProcessor
 };
