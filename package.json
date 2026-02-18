@@ -1,0 +1,21 @@
+{
+  "name": "open-buckets",
+  "version": "1.0.0",
+  "description": "Directory watcher for detecting and processing file drops",
+  "main": "src/index.js",
+  "bin": {
+    "open-buckets": "./src/index.js"
+  },
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "keywords": [
+    "directory-watcher",
+    "file-processor"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
