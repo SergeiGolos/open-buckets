@@ -1,0 +1,72 @@
+# Open Buckets Configuration File
+# This file defines how to build context when a file is dropped
+
+[context]
+name = "Node.js Project Context"
+
+# Files to include in the context
+[include]
+# Use glob patterns to match files
+patterns = [
+    "src/**/*.js",
+    "src/**/*.ts",
+    "docs/**/*.md",
+    "README.md",
+    "package.json",
+    "tsconfig.json",
+    ".env.example"
+]
+
+# Files to exclude from the context
+[exclude]
+# These patterns will be excluded from results
+patterns = [
+    "node_modules/**",
+    "dist/**",
+    "build/**",
+    ".git/**",
+    "*.test.js",
+    "*.spec.ts",
+    "*.log",
+    "*.tmp"
+]
+
+# Directories to search for specific patterns
+[directories]
+# These directories will be grepped for the patterns below
+paths = [
+    "./configs",
+    "./templates"
+]
+
+# Grep patterns for each directory
+[directories.patterns]
+# When a file is dropped, these patterns will be searched in the specified directories
+"./configs" = [
+    "error",
+    "debug",
+    "warning",
+    "deprecated",
+    "TODO"
+]
+"./templates" = [
+    "TODO",
+    "FIXME",
+    "HACK",
+    "XXX",
+    "BUG"
+]
+
+# Limits to prevent excessive context
+[limits]
+# Maximum number of files to include in context
+maxFiles = 100
+# Maximum total size of all files (in megabytes)
+maxSizeMB = 10
+
+# Notes:
+# 1. Patterns are relative to the working directory where open-buckets is run
+# 2. Global config can be placed at ~/.config/open-buckets/.bucket-include
+# 3. Local .bucket-include takes precedence over global config
+# 4. Use ** for recursive directory matching (e.g., src/**/*.js)
+# 5. Use * for single-level matching (e.g., *.js)

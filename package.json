@@ -1,21 +1,28 @@
 {
   "name": "open-buckets",
-  "version": "1.0.0",
-  "description": "Directory watcher for detecting and processing file drops",
+  "version": "1.1.0",
+  "description": "Context builder and directory watcher for processing file drops with intelligent context collection",
   "main": "src/index.js",
   "bin": {
     "open-buckets": "./src/index.js"
   },
   "scripts": {
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "test": "node test/test.js"
   },
   "keywords": [
     "directory-watcher",
-    "file-processor"
+    "file-processor",
+    "context-builder",
+    "code-context"
   ],
   "author": "",
   "license": "MIT",
   "engines": {
     "node": ">=14.0.0"
+  },
+  "dependencies": {
+    "fast-glob": "^3.3.2",
+    "@iarna/toml": "^2.2.5"
   }
 }
