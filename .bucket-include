@@ -1,35 +1,20 @@
-[context]
-name = "Open Buckets Development Context"
+# Open Buckets Project Configuration
 
-[include]
-patterns = [
-    "src/**/*.js",
-    "docs/**/*.md",
-    "README.md",
-    "package.json"
-]
+# === Inclusion ===
+src/**/*.js
+docs/**/*.md
+README.md
+package.json
 
-[exclude]
-patterns = [
-    "node_modules/**",
-    "*.test.js",
-    "*.sh",
-    "test-buckets/**"
-]
+# === Exclusion ===
+!node_modules/**
+!*.test.js
+!*.sh
+!test-buckets/**
 
-[directories]
-paths = [
-    "./test-buckets/incoming"
-]
-
-[directories.patterns]
-"./test-buckets/incoming" = [
-    "test",
-    "hello",
-    "error",
-    "TODO"
-]
-
-[limits]
-maxFiles = 50
-maxSizeMB = 5
+# === Directory Grep ===
+[dirs:./test-buckets/incoming]
+test
+hello
+error
+TODO

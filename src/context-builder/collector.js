@@ -9,15 +9,15 @@ class FileCollector {
   }
 
   async collect() {
-    const { include, exclude, limits } = this.config;
+    const { include, exclude } = this.config;
 
     // If no include patterns, return empty
-    if (!include.patterns || include.patterns.length === 0) {
+    if (!include || include.length === 0) {
       return { files: [], stats: { totalSize: 0, count: 0 } };
     }
 
     // Collect files matching include patterns
-    const files = await fg(include.patterns, {
+    const files = await fg(include, {
       cwd: this.baseDir,
       absolute: true,
       ignore: this.getIgnorePatterns(exclude),
@@ -25,8 +25,8 @@ class FileCollector {
       followSymbolicLinks: false
     });
 
-    // Filter by size and limit
-    const filtered = this.filterByLimits(files, limits);
+    // Filter by limits (soft limits - no truncation)
+    const filtered = this.filterByLimits(files);
 
     return {
       files: filtered,
@@ -47,19 +47,19 @@ class FileCollector {
       '*.log'
     ];
 
-    if (exclude && exclude.patterns) {
-      patterns.push(...exclude.patterns);
+    if (exclude && exclude.length > 0) {
+      patterns.push(...exclude);
     }
 
     return patterns;
   }
 
-  filterByLimits(files, limits) {
-    const maxFiles = limits?.maxFiles || 100;
-    const maxSizeBytes = (limits?.maxSizeMB || 10) * 1024 * 1024;
+  filterByLimits(files) {
+    // Soft limits - just collect what we can, don't truncate
+    const maxSizeBytes = 10 * 1024 * 1024; // 10MB default
 
-    // Filter by file size
-    const sizeFiltered = files.filter(file => {
+    // Filter by file size only
+    return files.filter(file => {
       try {
         const stats = fs.statSync(file);
         return stats.size <= maxSizeBytes;
@@ -68,9 +68,6 @@ class FileCollector {
         return false;
       }
     });
-
-    // Limit number of files
-    return sizeFiltered.slice(0, maxFiles);
   }
 
   calculateTotalSize(files) {

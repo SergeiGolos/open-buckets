@@ -18,19 +18,26 @@ class ContextBuilder {
       grepResults: [],
       metadata: {
         timestamp: new Date().toISOString(),
-        configName: this.config.context?.name || 'Unnamed Context',
         baseDir: this.baseDir
       }
     };
 
     // Collect related files from include patterns
-    const collectionResult = await this.collector.collect();
-    context.relatedFiles = collectionResult.files;
-    context.collectionStats = collectionResult.stats;
+    try {
+      const collectionResult = await this.collector.collect();
+      context.relatedFiles = collectionResult.files;
+      context.collectionStats = collectionResult.stats;
+    } catch (err) {
+      console.error('Error collecting related files:', err.message);
+    }
 
     // Grep directories for patterns
-    const grepResults = await this.grepper.search();
-    context.grepResults = grepResults;
+    try {
+      const grepResults = await this.grepper.search();
+      context.grepResults = grepResults;
+    } catch (err) {
+      console.error('Error searching directories:', err.message);
+    }
 
     return context;
   }
@@ -38,15 +45,24 @@ class ContextBuilder {
   getDroppedFileInfo(filePath) {
     try {
       const stats = fs.statSync(filePath);
-      const content = this.isTextFile(filePath) ? fs.readFileSync(filePath, 'utf8') : null;
+      const isText = this.isTextFile(filePath);
+      let content = null;
+
+      if (isText) {
+        try {
+          content = fs.readFileSync(filePath, 'utf8');
+        } catch (err) {
+          console.error(`Error reading file ${filePath}:`, err.message);
+        }
+      }
 
       return {
         path: filePath,
         name: path.basename(filePath),
         size: stats.size,
         sizeFormatted: this.formatFileSize(stats.size),
-        isText: this.isTextFile(filePath),
-        content: content
+        isText,
+        content
       };
     } catch (err) {
       console.error(`Error reading dropped file ${filePath}:`, err.message);
@@ -93,67 +109,57 @@ class ContextBuilder {
     return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
   }
 
+  /**
+   * Format context as Obsidian-style markdown
+   */
   formatContext(context) {
     const lines = [];
-    const sep = '='.repeat(80);
 
-    // Header
-    lines.push(sep);
-    lines.push(`CONTEXT BUILDER - ${context.metadata.configName}`);
-    lines.push(`Built: ${context.metadata.timestamp}`);
-    lines.push(`Base Directory: ${context.metadata.baseDir}`);
-    lines.push(sep);
+    // Header with file info
+    lines.push(`# File: ${context.droppedFile.name}`);
+    lines.push(`# Directory: ${context.droppedFile.path}`);
+    lines.push(`# Size: ${context.droppedFile.sizeFormatted}`);
+    lines.push(`# Timestamp: ${context.metadata.timestamp}`);
     lines.push('');
 
-    // Dropped File
-    lines.push(sep);
-    lines.push('DROPPED FILE');
-    lines.push(sep);
-    lines.push(`File: ${context.droppedFile.name}`);
-    lines.push(`Path: ${context.droppedFile.path}`);
-    lines.push(`Size: ${context.droppedFile.sizeFormatted}`);
-    lines.push(`Type: ${context.droppedFile.isText ? 'TEXT' : 'BINARY'}`);
-    lines.push('');
-
+    // Content section
     if (context.droppedFile.isText && context.droppedFile.content) {
-      lines.push('Content:');
-      lines.push('-'.repeat(40));
+      lines.push('## Content');
+      const ext = this.getFileExtension(context.droppedFile.name);
+      lines.push(`\`\`\`${ext || ''}`);
       lines.push(context.droppedFile.content);
-      lines.push('-'.repeat(40));
-      lines.push('[END OF FILE]');
+      lines.push('```');
+      lines.push('');
     } else {
-      lines.push('[BINARY FILE - Content not displayed]');
+      lines.push('## Content');
+      lines.push('> [Binary file - content not displayed]');
+      lines.push('');
     }
-    lines.push('');
 
-    // Related Files Summary
+    // Related files section
     if (context.relatedFiles.length > 0) {
-      lines.push(sep);
-      lines.push('RELATED FILES (from include patterns)');
-      lines.push(sep);
-      lines.push(`Total files collected: ${context.collectionStats.count}`);
-      lines.push(`Total size: ${this.formatFileSize(context.collectionStats.totalSize)}`);
+      lines.push('## Related Context');
+      lines.push(`*Total files: ${context.collectionStats.count}*`);
+      lines.push(`*Total size: ${this.formatFileSize(context.collectionStats.totalSize)}*`);
       lines.push('');
 
-      // Show first few files
-      const previewFiles = context.relatedFiles.slice(0, 20);
-      for (const file of previewFiles) {
+      // List files
+      const maxFiles = 20;
+      for (const file of context.relatedFiles.slice(0, maxFiles)) {
         const relPath = path.relative(this.baseDir, file);
-        lines.push(`  - ${relPath}`);
+        lines.push(`- \`${relPath}\``);
       }
 
-      if (context.relatedFiles.length > 20) {
-        lines.push(`  ... and ${context.relatedFiles.length - 20} more files`);
+      if (context.relatedFiles.length > maxFiles) {
+        lines.push(`- ... and ${context.relatedFiles.length - maxFiles} more files`);
       }
       lines.push('');
     }
 
-    // Grep Results
+    // Grep results section
     if (context.grepResults.length > 0) {
-      lines.push(sep);
-      lines.push('DIRECTORY GREP RESULTS');
-      lines.push(sep);
-      lines.push(`Total matches: ${context.grepResults.length}`);
+      lines.push('## Grep Results');
+      lines.push(`*Total matches: ${context.grepResults.length}*`);
       lines.push('');
 
       // Group by file
@@ -167,27 +173,32 @@ class ContextBuilder {
 
       for (const [file, matches] of Object.entries(byFile)) {
         const relPath = path.relative(this.baseDir, file);
-        lines.push(`${relPath}:`);
-        for (const match of matches.slice(0, 5)) { // Limit to 5 matches per file
+        lines.push(`### \`${relPath}\``);
+
+        const maxMatches = 10;
+        for (const match of matches.slice(0, maxMatches)) {
           if (match.line !== null) {
-            lines.push(`  Line ${match.line}: ${match.content}`);
+            // Context line
+            lines.push(match.content);
           } else {
-            lines.push(`  ${match.content}`);
+            // Match with line number
+            lines.push(`Line ${match.line}: \`${match.content}\``);
           }
         }
-        if (matches.length > 5) {
-          lines.push(`  ... and ${matches.length - 5} more matches`);
+
+        if (matches.length > maxMatches) {
+          lines.push(`... and ${matches.length - maxMatches} more matches`);
         }
         lines.push('');
       }
     }
 
-    // Footer
-    lines.push(sep);
-    lines.push('END OF CONTEXT');
-    lines.push(sep);
-
     return lines.join('\n');
+  }
+
+  getFileExtension(filename) {
+    const extMatch = filename.match(/\.([^./]+)$/);
+    return extMatch ? extMatch[1] : '';
   }
 }
 

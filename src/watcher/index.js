@@ -5,10 +5,14 @@ const { getProcessor } = require('../processor');
 let watchers = [];
 
 function start(directories) {
-  console.log('Starting directory watchers...');
+  console.log('# Open Buckets - Context Builder');
+  console.log('');
 
-  // Preserve original working directory for config and context building
+  // Preserve original working directory for all operations
   const originalCwd = process.cwd();
+
+  console.log(`**Working directory:** \`${originalCwd}\``);
+  console.log('');
 
   // Initialize processor with original CWD
   const processor = getProcessor(originalCwd);
@@ -25,7 +29,7 @@ function start(directories) {
               try {
                 const stats = fs.statSync(filePath);
                 if (stats.isFile()) {
-                  // Pass original CWD for context building
+                  // Pass original CWD for all operations
                   processor.processFile(filePath, dir);
                 }
               } catch (err) {
@@ -37,29 +41,44 @@ function start(directories) {
       });
 
       watcher.on('error', (err) => {
-        console.error(`Watcher error for ${dir}:`, err.message);
+        console.error(`\n# Watcher Error`);
+        console.error(`Directory: \`${dir}\``);
+        console.error(`\`\`\``);
+        console.error(err.message);
+        console.error('```');
       });
 
       watchers.push({ watcher, dir });
-      console.log(`Watching: ${dir}`);
+      console.log(`✓ Watching: \`${dir}\``);
     } catch (err) {
-      console.error(`Failed to watch ${dir}:`, err.message);
+      console.error(`# Failed to watch`);
+      console.error(`Directory: \`${dir}\``);
+      console.error(`\`\`\``);
+      console.error(err.message);
+      console.error('```');
     }
   }
 
   console.log('');
-  console.log(`Working directory: ${originalCwd}`);
-  console.log('Waiting for file drops... Press Ctrl+C to stop.\n');
+  console.log('> Waiting for file drops...');
+  console.log('> Press `Ctrl+C` to stop');
+  console.log('');
 }
 
 function stop() {
-  console.log('\nStopping watchers...');
+  console.log('\n# Stopping watchers');
+  console.log('');
+
   for (const { watcher, dir } of watchers) {
     try {
       watcher.close();
-      console.log(`Stopped watching: ${dir}`);
+      console.log(`✓ Stopped: \`${dir}\``);
     } catch (err) {
-      console.error(`Error stopping watcher for ${dir}:`, err.message);
+      console.error(`# Error stopping watcher`);
+      console.error(`Directory: \`${dir}\``);
+      console.error(`\`\`\``);
+      console.error(err.message);
+      console.error('```');
     }
   }
   watchers = [];

@@ -6,54 +6,71 @@ const config = require('../config');
 class FileProcessor {
   constructor(baseDir) {
     this.baseDir = baseDir;
-    this.config = config.loadConfig();
-    this.contextBuilder = new ContextBuilder(this.config, baseDir);
   }
 
   async processFile(filePath, watchDir) {
+    console.log(`\n# Processing File`);
+    console.log(`File: \`${path.basename(filePath)}\``);
+    console.log(`Directory: \`${watchDir}\``);
+    console.log(`Path: \`${filePath}\``);
+    console.log('');
+
     try {
-      console.log('\n' + '='.repeat(80));
-      console.log('File dropped - Building Context...');
-      console.log('='.repeat(80));
-      console.log(`Watch directory: ${watchDir}`);
-      console.log(`Dropped file: ${path.basename(filePath)}`);
-      console.log(`Full path: ${filePath}`);
+      // Load config for this specific file type
+      const fileConfig = config.loadConfigForFile(filePath, this.baseDir);
+
+      // Display config source info
+      this.displayConfigInfo(fileConfig);
       console.log('');
 
-      // Load and display config info
-      this.displayConfigInfo();
-
+      console.log('> Building context...');
       console.log('');
-      console.log('-'.repeat(80));
-      console.log('Building context...');
-      console.log('-'.repeat(80));
 
       // Build full context
-      const context = await this.contextBuilder.buildForFile(filePath);
+      const builder = new ContextBuilder(fileConfig, this.baseDir);
+      const context = await builder.buildForFile(filePath);
 
-      console.log('');
-      console.log('-'.repeat(80));
-      console.log('Context complete!');
-      console.log('-'.repeat(80));
-      console.log('');
-
-      // Display the full context
-      const formatted = this.contextBuilder.formatContext(context);
+      // Display formatted context
+      const formatted = builder.formatContext(context);
       console.log(formatted);
       console.log('');
 
+      console.log('✓ Context complete');
+      console.log('');
+
     } catch (err) {
-      console.error(`Error processing file ${filePath}:`, err.message);
-      console.error(err.stack);
+      console.error(`\n# Error Processing File`);
+      console.error(`File: \`${path.basename(filePath)}\``);
+      console.error(`\`\`\``);
+      console.error(err.message);
+      console.error('```');
+      console.error('');
+
+      // Create error file
+      try {
+        const errorPath = config.createErrorFile(filePath, err, path.dirname(filePath));
+        console.error(`Error file created: \`${path.basename(errorPath)}\``);
+      } catch (createErr) {
+        console.error(`Failed to create error file: ${createErr.message}`);
+      }
+
+      console.error('');
     }
   }
 
-  displayConfigInfo() {
-    console.log(`Context name: ${this.config.context?.name || 'Unnamed'}`);
-    console.log(`Include patterns: ${this.config.include?.patterns?.length || 0}`);
-    console.log(`Exclude patterns: ${this.config.exclude?.patterns?.length || 0}`);
-    console.log(`Watch directories: ${this.config.directories?.paths?.length || 0}`);
-    console.log(`File limit: ${this.config.limits?.maxFiles || 100} files, ${this.config.limits?.maxSizeMB || 10}MB`);
+  displayConfigInfo(fileConfig) {
+    console.log(`## Configuration`);
+    console.log(`**Base config source:** ${fileConfig._baseSource}`);
+
+    if (fileConfig._skillSource !== 'none') {
+      console.log(`**Skill file:** ${fileConfig._skillSource}`);
+      console.log(`**Skill for extension:** \`.${fileConfig._fileExtension}\``);
+    }
+
+    console.log('');
+    console.log(`**Include patterns:** ${fileConfig.include?.length || 0}`);
+    console.log(`**Exclude patterns:** ${fileConfig.exclude?.length || 0}`);
+    console.log(`**Grep directories:** ${Object.keys(fileConfig.directories || {}).length}`);
   }
 }
 

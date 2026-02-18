@@ -1,24 +1,29 @@
 # Open Buckets
 
-A Node.js application for watching multiple directories and reacting to file drops.
+**Context Builder and Directory Watcher** - Watch directories and automatically build comprehensive context when files are dropped.
 
 ## Features
 
-- Watch multiple directories simultaneously
-- Detect file drops and identify the source directory
-- Display text-based file contents to the screen
-- Daemon mode support
-- Binary file detection and graceful skipping
+- 📁 **Watch Multiple Directories** - Monitor any number of directories for file drops
+- 🎯 **Gitignore-Style Configuration** - Simple, familiar pattern matching
+- 📦 **File-Type Skills** - Per-extension rules via `{ext}.bucket-include` files
+- 🔍 **Directory Grep** - Search directories for specific patterns
+- 📝 **Obsidian-Style Output** - Clean, markdown-formatted context
+- 🛡️ **Error Handling** - Automatic `.error` file creation on failures
+- 👥 **Global & Local Configs** - Profile system with overrides
+- 🤖 **Daemon Mode** - Run in background with PID management
 
 ## Installation
 
 ```bash
+git clone https://github.com/SergeiGolos/open-buckets.git
+cd open-buckets
 npm install
 ```
 
 ## Usage
 
-### Basic Usage - Watch a Single Directory
+### Basic Usage
 
 ```bash
 node src/index.js --watch ./incoming
@@ -32,53 +37,122 @@ node src/index.js --watch ./incoming --watch ./processed --watch ./uploads
 
 ### Daemon Mode
 
-Run in the background as a daemon:
-
 ```bash
 node src/index.js --daemon --watch ./uploads
 ```
 
-The daemon will write its PID to `open-buckets.pid` in the current directory.
+## Configuration
 
-### Stopping the Daemon
+### Gitignore-Style Patterns
+
+Create `.bucket-include` in your project:
+
+```gitignore
+# Include patterns (no prefix = include)
+src/**/*.js
+docs/**/*.md
+
+# Exclude patterns (prefix with !)
+!node_modules/**
+!dist/**
+!*.test.js
+```
+
+### Directory Grep
+
+Search directories for specific patterns:
+
+```gitignore
+# [dirs:path] sections define grep patterns
+[dirs:./configs]
+error
+debug
+TODO
+
+[dirs:./templates]
+FIXME
+HACK
+```
+
+### File-Type Skills
+
+Create per-extension skill files:
+
+- `.js.bucket-include` - Rules for JavaScript files
+- `.py.bucket-include` - Rules for Python files
+- `.md.bucket-include` - Rules for Markdown files
+
+Skills override base config for their file type.
+
+### Global Config
+
+Place global config in `~/.config/open-buckets/.bucket-include`:
 
 ```bash
-# Using the PID file
-kill $(cat open-buckets.pid)
-
-# Or find and kill manually
-ps aux | grep "open-buckets" | grep -v grep
+mkdir -p ~/.config/open-buckets
+cat > ~/.config/open-buckets/.bucket-include << 'EOF'
+# Global rules for all projects
+!node_modules/**
+!dist/**
+EOF
 ```
+
+Local configs override global rules.
 
 ## Output Format
 
-When a file is detected, Open Buckets displays:
+When a file is dropped, Open Buckets builds context:
 
-```
-================================================================================
-File dropped: test.txt
-Watch directory: /path/to/incoming
-Full path: /path/to/incoming/test.txt
-Size: 45 B
-Detected at: 2026-02-18T04:23:45.123Z
+```markdown
+# File: test.js
+# Directory: /path/to/watch
+# Size: 1.2 KB
+# Timestamp: 2026-02-18T05:00:00Z
 
-Content (text file):
-----------------------------------------
-Hello, World! This is a test file.
-----------------------------------------
-[END OF FILE]
-================================================================================
+## Content
+```javascript
+const x = 1;
+console.log(x);
 ```
 
-Binary files are detected and skipped with a `[BINARY FILE - Skipped]` message.
+## Related Context
+*Total files: 15*
+*Total size: 45.2 KB*
 
-## Text File Detection
+- `src/main.js` (2.1 KB)
+- `src/utils.js` (1.5 KB)
+- ...
 
-Open Buckets uses heuristics to detect text files:
+## Grep Results
+*Total matches: 7*
 
-- Checks for null bytes in the first 8KB
-- Looks for common binary file signatures (PDF, ZIP, PNG, JPEG, ELF)
-- Falls back to UTF-8 decode attempt
+### `src/config.js`
+Line 15: `console.error("Error")`
+
+...
+```
+
+## Error Handling
+
+On processing failure, a `.error` file is created:
+
+```markdown
+# Error Processing File
+File: test.js
+Path: /path/to/test.js
+Timestamp: 2026-02-18T05:00:00Z
+
+## Error
+
+```
+Cannot parse file: Invalid syntax
+```
+
+## Original File Content
+```javascript
+const x = 1;
+```
+```
 
 ## Project Structure
 
@@ -87,34 +161,77 @@ open-buckets/
 ├── src/
 │   ├── index.js           # Main CLI entry point
 │   ├── watcher/          # Directory watching logic
-│   ├── processor/        # File processing and display
-│   └── daemon/           # Daemon mode management
+│   ├── processor/        # File processing and context building
+│   ├── context-builder/   # Context collection and formatting
+│   └── config/          # Configuration parser and manager
 ├── docs/
 │   ├── adr/             # Architecture Decision Records
 │   └── prd/            # Product Requirements Documents
-└── test-buckets/        # Test directories
+├── .bucket-include      # Project configuration
+├── .bucket-include.example  # Example configuration
+└── .{ext}.bucket-include  # File-type specific skills
 ```
 
-## Development
+## Examples
 
-```bash
-# Start with test directories
-node src/index.js --watch ./test-buckets/incoming --watch ./test-buckets/processed
+### Example 1: Node.js Project
 
-# Test with a file drop
-echo "Test content" > ./test-buckets/incoming/test.txt
+```gitignore
+# .bucket-include
+src/**/*.js
+lib/**/*.js
+!node_modules/**
+!dist/**
+!*.test.js
+
+[dirs:./src]
+TODO
+FIXME
+
+[dirs:./test]
+describe
+it
 ```
 
-## Notes
+### Example 2: Python Project
 
-- File detection has a small delay (100ms) to ensure files are fully written
-- Symbolic links are not followed
-- Only file creation events trigger processing (not modifications)
-- Daemon mode detaches completely (no stdout/stderr after startup)
+```gitignore
+# .bucket-include
+src/**/*.py
+tests/**/*.py
+requirements.txt
+!__pycache__/**
+!*.pyc
 
-## Roadmap
+[dirs:./src]
+import
+class
+def
 
-See `docs/prd/001-product-requirements.md` for planned features.
+[dirs:./tests]
+assert
+mock
+```
+
+### Example 3: Documentation Project
+
+```gitignore
+# .bucket-include
+docs/**/*.md
+README.md
+!docs/draft/**
+
+[dirs:./docs]
+TODO
+FIXME
+WIP
+```
+
+## Architecture Decisions
+
+- [ADR-001](docs/adr/001-architecture-overview.md) - Initial Architecture
+- [ADR-002](docs/adr/002-context-builder.md) - Context Builder (superseded)
+- [ADR-003](docs/adr/003-gitignore-config.md) - Gitignore-Style Configuration
 
 ## License
 

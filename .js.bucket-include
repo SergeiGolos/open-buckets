@@ -1,0 +1,26 @@
+# JavaScript File Context Rules
+# Applied when .js files are dropped
+
+# === Include Patterns for JS Files ===
+src/**/*.js
+lib/**/*.js
+test/**/*.js
+
+# === Exclude Patterns for JS Files ===
+!node_modules/**
+!dist/**
+!*.min.js
+!*.test.js
+!*.spec.js
+
+# === Directory Grep ===
+[dirs:./src]
+console.log
+console.error
+TODO
+FIXME
+
+[dirs:./test]
+describe
+it
+expect

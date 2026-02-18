@@ -14,28 +14,27 @@ class DirectoryGrep {
   async search() {
     const { directories } = this.config;
 
-    if (!directories?.paths || directories.paths.length === 0) {
+    if (!directories || Object.keys(directories).length === 0) {
       return [];
     }
 
     const results = [];
 
-    for (const dir of directories.paths) {
-      const patterns = directories.patterns?.[dir] || [];
-
-      if (patterns.length === 0) {
-        console.log(`Warning: No patterns defined for directory: ${dir}`);
+    // New format: directories is { path: [patterns...] }
+    for (const [dirPath, patterns] of Object.entries(directories)) {
+      if (!patterns || patterns.length === 0) {
+        console.log(`Warning: No patterns defined for directory: ${dirPath}`);
         continue;
       }
 
-      const dirPath = path.resolve(this.baseDir, dir);
+      const resolvedDirPath = path.resolve(this.baseDir, dirPath);
 
-      if (!fs.existsSync(dirPath)) {
-        console.log(`Warning: Directory not found: ${dirPath}`);
+      if (!fs.existsSync(resolvedDirPath)) {
+        console.log(`Warning: Directory not found: ${resolvedDirPath}`);
         continue;
       }
 
-      const matches = await this.grepDirectory(dirPath, patterns);
+      const matches = await this.grepDirectory(resolvedDirPath, patterns);
       results.push(...matches);
     }
 
@@ -85,8 +84,7 @@ class DirectoryGrep {
     const hasRipgrep = this.checkCommand('rg');
 
     if (hasRipgrep) {
-      // Use ripgrep (rg) - updated for compatibility
-      // Remove -t text flag, use -I instead for binary files
+      // Use ripgrep (rg)
       return `rg --color=never --no-heading --line-number -n -C 2 -I "${this.escapePattern(pattern)}" "${dirPath}"`;
     } else {
       // Use grep
